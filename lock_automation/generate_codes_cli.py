@@ -61,7 +61,7 @@ def main() -> None:
         print(f" failed! ({e})", file=sys.stderr)
         sys.exit(1)
 
-    print("Updating Playbypoint entry codes for the next 2 weeks...", end="", flush=True)
+    print("Updating Playbypoint entry codes...", end="", flush=True)
     try:
         play_by_point.update_entry_codes(owner_id=args.play_by_point_owner, codes=updated_codes)
         print(" success.")
