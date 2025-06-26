@@ -2,7 +2,7 @@
 name = "lock-automation"
 version = "0.0.1"
 description = "Automation workflows for smart locks used at Aspen Padel Club courts."
-authors = [{ name = "Florian Maas", email = "Olympus-Padel@gmail.com" }]
+authors = [{ name = "Evan Brown", email = "evan@aspenpadel.club" }]
 readme = "README.md"
 keywords = ['python']
 requires-python = ">=3.9,<4.0"

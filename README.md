@@ -2,7 +2,6 @@
 
 [![Release](https://img.shields.io/github/v/release/Olympus-Padel/lock-automation)](https://img.shields.io/github/v/release/Olympus-Padel/lock-automation)
 [![Build status](https://img.shields.io/github/actions/workflow/status/Olympus-Padel/lock-automation/main.yml?branch=main)](https://github.com/Olympus-Padel/lock-automation/actions/workflows/main.yml?query=branch%3Amain)
-[![codecov](https://codecov.io/gh/Olympus-Padel/lock-automation/branch/main/graph/badge.svg)](https://codecov.io/gh/Olympus-Padel/lock-automation)
 [![Commit activity](https://img.shields.io/github/commit-activity/m/Olympus-Padel/lock-automation)](https://img.shields.io/github/commit-activity/m/Olympus-Padel/lock-automation)
 [![License](https://img.shields.io/github/license/Olympus-Padel/lock-automation)](https://img.shields.io/github/license/Olympus-Padel/lock-automation)
 
@@ -55,12 +54,12 @@ git push origin main
 You are now ready to start development on your project!
 The CI/CD pipeline will be triggered when you open a pull request, merge to main, or when you create a new release.
 
-To finalize the set-up for publishing to PyPI, see [here](https://Olympus-Padel.github.io/cookiecutter-uv/features/publishing/#set-up-for-pypi).
-For activating the automatic documentation with MkDocs, see [here](https://Olympus-Padel.github.io/cookiecutter-uv/features/mkdocs/#enabling-the-documentation-on-github).
-To enable the code coverage reports, see [here](https://Olympus-Padel.github.io/cookiecutter-uv/features/codecov/).
+To finalize the set-up for publishing to PyPI, see [here](https://fpgmaas.github.io/cookiecutter-uv/features/publishing/#set-up-for-pypi).
+For activating the automatic documentation with MkDocs, see [here](https://fpgmaas.github.io/cookiecutter-uv/features/mkdocs/#enabling-the-documentation-on-github).
+To enable the code coverage reports, see [here](https://fpgmaas.github.io/cookiecutter-uv/features/codecov/).
 
 ## Releasing a new version
 
 ---
 
-Repository initiated with [Olympus-Padel/cookiecutter-uv](https://github.com/Olympus-Padel/cookiecutter-uv).
+Repository initiated with [fpgmaas/cookiecutter-uv](https://github.com/fpgmaas/cookiecutter-uv).
