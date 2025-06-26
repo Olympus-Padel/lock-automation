@@ -30,9 +30,9 @@ dev = [
     "tox-uv>=1.11.3",
     "deptry>=0.23.0",
     "mypy>=0.991",
-    
+
     "ruff>=0.11.5",
-    
+
 ]
 
 [build-system]
@@ -105,5 +105,3 @@ ignore = [
 
 [tool.ruff.format]
 preview = true
-
-
