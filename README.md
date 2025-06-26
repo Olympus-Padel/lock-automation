@@ -6,7 +6,7 @@
 [![Commit activity](https://img.shields.io/github/commit-activity/m/fpgmaas/lock-automation)](https://img.shields.io/github/commit-activity/m/fpgmaas/lock-automation)
 [![License](https://img.shields.io/github/license/fpgmaas/lock-automation)](https://img.shields.io/github/license/fpgmaas/lock-automation)
 
-Automation workflows for smart locks used at Aspen Padel Club courts.
+Automation workflows for smart locks used at Olympus Padel Club courts.
 
 - **Github repository**: <https://github.com/fpgmaas/lock-automation/>
 

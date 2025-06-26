@@ -1,0 +1,29 @@
+name: Generate Lock Pins
+
+on:
+  schedule:
+    # Runs every day at 17:00 UTC (12:00pm EST/EDT)
+    - cron: "0 17 * * *"
+  workflow_dispatch:
+    # Allows manual triggering of the workflow
+
+jobs:
+  generate-lock-pins:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up the environment
+        uses: ./.github/actions/setup-python-env
+
+      - name: Generate lock pins for the Denver court
+        run: |
+          uv run python -m lock_automation.generate_codes_cli \
+            --igloo-client-id "${{ secrets.IGLOO_CLIENT_ID }}" \
+            --igloo-client-secret "${{ secrets.IGLOO_CLIENT_SECRET }}" \
+            --igloo-lock-id "${{ secrets.DENVER_LOCK_ID }}"
+            --play-by-point-username "${{ secrets.PLAY_BY_POINT_USERNAME }}"
+            --play-by-point-password "${{ secrets.PLAY_BY_POINT_PASSWORD }}"
+            --play-by-point-owner "${{ secrets.DENVER_PLAY_BY_POINT_OWNER }}"
+            --timezone "America/Denver"
