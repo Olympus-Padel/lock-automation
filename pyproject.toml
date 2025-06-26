@@ -2,7 +2,7 @@
 name = "lock-automation"
 version = "0.0.1"
 description = "Automation workflows for smart locks used at Aspen Padel Club courts."
-authors = [{ name = "Florian Maas", email = "fpgmaas@gmail.com" }]
+authors = [{ name = "Florian Maas", email = "Olympus-Padel@gmail.com" }]
 readme = "README.md"
 keywords = ['python']
 requires-python = ">=3.9,<4.0"
@@ -23,9 +23,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://fpgmaas.github.io/lock-automation/"
-Repository = "https://github.com/fpgmaas/lock-automation"
-Documentation = "https://fpgmaas.github.io/lock-automation/"
+Homepage = "https://Olympus-Padel.github.io/lock-automation/"
+Repository = "https://github.com/Olympus-Padel/lock-automation"
+Documentation = "https://Olympus-Padel.github.io/lock-automation/"
 
 [dependency-groups]
 dev = [
