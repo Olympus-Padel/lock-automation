@@ -22,8 +22,8 @@ jobs:
           uv run python -m lock_automation.generate_codes_cli \
             --igloo-client-id "${{ secrets.IGLOO_CLIENT_ID }}" \
             --igloo-client-secret "${{ secrets.IGLOO_CLIENT_SECRET }}" \
-            --igloo-lock-id "${{ secrets.DENVER_LOCK_ID }}"
-            --play-by-point-username "${{ secrets.PLAY_BY_POINT_USERNAME }}"
-            --play-by-point-password "${{ secrets.PLAY_BY_POINT_PASSWORD }}"
-            --play-by-point-owner "${{ secrets.DENVER_PLAY_BY_POINT_OWNER }}"
+            --igloo-lock-id "${{ secrets.DENVER_LOCK_ID }}" \
+            --play-by-point-username "${{ secrets.PLAY_BY_POINT_USERNAME }}" \
+            --play-by-point-password "${{ secrets.PLAY_BY_POINT_PASSWORD }}" \
+            --play-by-point-owner "${{ secrets.DENVER_PLAY_BY_POINT_OWNER }}" \
             --timezone "America/Denver"
