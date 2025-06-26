@@ -20,6 +20,7 @@ classifiers = [
 dependencies = [
     "bs4>=0.0.2",
     "requests>=2.32.4",
+    "types-requests>=2.32.4.20250611",
 ]
 
 [project.urls]
@@ -111,3 +112,7 @@ ignore = [
 
 [tool.ruff.format]
 preview = true
+
+# TODO(thomas): There has to be a better way for deptry to respect type stubs...right??
+[tool.deptry.per_rule_ignores]
+DEP002 = ["types-requests"]
