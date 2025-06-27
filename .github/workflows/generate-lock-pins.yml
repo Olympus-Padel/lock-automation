@@ -2,8 +2,8 @@ name: Generate Lock Pins
 
 on:
   schedule:
-    # Runs every day at 17:00 UTC (12:00pm EST/EDT)
-    - cron: "0 17 * * *"
+    # Runs every day at 5:00am UTC (10:00pm or 11:00pm Mountain Time, depending on daylight savings)
+    - cron: "0 5 * * *"
   workflow_dispatch:
     # Allows manual triggering of the workflow
 
