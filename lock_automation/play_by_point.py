@@ -51,8 +51,10 @@ def _build_update_payload(
 
     for i, (day, variant_id) in enumerate(entry_codes["day_ids"].items()):
         if day in updated_codes:
-            # Could be None (explicit clear)
             code = updated_codes[day]
+            if code is None:
+                # Omitting from the payload will clear it if it exists, or do nothing if it doesn't
+                continue
         elif variant_id in entry_codes["existing_values"]:
             # Preserve existing code
             code = entry_codes["existing_values"][variant_id]["value"]
@@ -63,21 +65,13 @@ def _build_update_payload(
         prefix = f"rule[values_attributes][{i}]"
 
         if variant_id in entry_codes["existing_values"]:
-            # Update if it exists (include the ID)
-            if code is None:
-                # Omitting the item entirely will clear it
-                continue
+            # We have to include these fields for an update
             existing = entry_codes["existing_values"][variant_id]
             payload[f"{prefix}[id]"] = existing["id"]
-            payload[f"{prefix}[rule_id]"] = entry_codes["rule_id"]
-            payload[f"{prefix}[value]"] = code
-        else:
-            if code is None:
-                # No existing entry to destroy, and nothing to create
-                continue
-            payload[f"{prefix}[rule_id]"] = entry_codes["rule_id"]
-            payload[f"{prefix}[value]"] = code
 
+        # We always include these fields for a write
+        payload[f"{prefix}[rule_id]"] = entry_codes["rule_id"]
+        payload[f"{prefix}[value]"] = code
         payload[f"{prefix}[value_variants_attributes][0][variant_rule_id]"] = entry_codes["variant_id"]
         payload[f"{prefix}[value_variants_attributes][0][rule_variant_item_id]"] = str(variant_id)
 
