@@ -50,24 +50,28 @@ def _build_update_payload(
     payload: dict[str, Any] = {"rule[id]": entry_codes["rule_id"], "owner": owner_id}
 
     for i, (day, variant_id) in enumerate(entry_codes["day_ids"].items()):
-        # Skip codes that aren't being updated (or set to None)
-        if day not in updated_codes:
+        if day in updated_codes:
+            code = updated_codes[day]
+            if code is None:
+                # Omitting from the payload will clear it if it exists, or do nothing if it doesn't
+                continue
+        elif variant_id in entry_codes["existing_values"]:
+            # Preserve existing code
+            code = entry_codes["existing_values"][variant_id]["value"]
+        else:
+            # No update and no existing value
             continue
 
-        code = updated_codes[day]
         prefix = f"rule[values_attributes][{i}]"
 
         if variant_id in entry_codes["existing_values"]:
-            # Update if it exists (include the ID)
+            # We have to include these fields for an update
             existing = entry_codes["existing_values"][variant_id]
             payload[f"{prefix}[id]"] = existing["id"]
-            payload[f"{prefix}[rule_id]"] = entry_codes["rule_id"]
-            payload[f"{prefix}[value]"] = code
-        else:
-            # Create new entry
-            payload[f"{prefix}[rule_id]"] = entry_codes["rule_id"]
-            payload[f"{prefix}[value]"] = code
 
+        # We always include these fields for a write
+        payload[f"{prefix}[rule_id]"] = entry_codes["rule_id"]
+        payload[f"{prefix}[value]"] = code
         payload[f"{prefix}[value_variants_attributes][0][variant_rule_id]"] = entry_codes["variant_id"]
         payload[f"{prefix}[value_variants_attributes][0][rule_variant_item_id]"] = str(variant_id)
 
@@ -118,7 +122,6 @@ class PlayByPointClient:
 
         Providing None as the code value will clear the code for that day.
         Omitting a key results in no change.
-        TODO(thomas): I haven't tested deletes and there's a good chance they don't work, but we don't need them right now.
 
         Args:
             owner_id (str): The ID of the owner.
