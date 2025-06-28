@@ -52,7 +52,7 @@ def main() -> None:
     igloo = IglooClient.from_client_credentials(client_id=args.igloo_client_id, client_secret=args.igloo_client_secret)
     tz = ZoneInfo(args.timezone)
     today = datetime.now(tz).date()
-    updated_codes: dict[str, str] = {}
+    updated_codes: dict[str, str | None] = {}
 
     logger.info(f"Generating new lock pins for the next {args.num_days} days (starting tomorrow):")
     for i in range(1, args.num_days + 1):
@@ -78,6 +78,7 @@ def main() -> None:
 
     logger.info("Updating Playbypoint entry codes...")
     try:
+        updated_codes["12"] = None
         play_by_point.update_entry_codes(owner_id=args.play_by_point_owner, codes=updated_codes)
         logger.info("Successfully updated Playbypoint entry codes")
     except Exception:

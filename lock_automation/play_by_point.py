@@ -52,8 +52,7 @@ def _build_update_payload(
     for i, (day, variant_id) in enumerate(entry_codes["day_ids"].items()):
         if day in updated_codes:
             # Could be None (explicit clear)
-            # NOTE(thomas): Apparently Rails-style APIs expect "" for clearing string values
-            code = updated_codes[day] or ""
+            code = updated_codes[day]
         elif variant_id in entry_codes["existing_values"]:
             # Preserve existing code
             code = entry_codes["existing_values"][variant_id]["value"]
@@ -65,12 +64,17 @@ def _build_update_payload(
 
         if variant_id in entry_codes["existing_values"]:
             # Update if it exists (include the ID)
+            if code is None:
+                # Omitting the item entirely will clear it
+                continue
             existing = entry_codes["existing_values"][variant_id]
             payload[f"{prefix}[id]"] = existing["id"]
             payload[f"{prefix}[rule_id]"] = entry_codes["rule_id"]
             payload[f"{prefix}[value]"] = code
         else:
-            # Create new entry
+            if code is None:
+                # No existing entry to destroy, and nothing to create
+                continue
             payload[f"{prefix}[rule_id]"] = entry_codes["rule_id"]
             payload[f"{prefix}[value]"] = code
 
@@ -124,7 +128,6 @@ class PlayByPointClient:
 
         Providing None as the code value will clear the code for that day.
         Omitting a key results in no change.
-        TODO(thomas): I haven't tested deletes and there's a good chance they don't work, but we don't need them right now.
 
         Args:
             owner_id (str): The ID of the owner.
