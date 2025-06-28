@@ -50,23 +50,23 @@ def _build_update_payload(
     payload: dict[str, Any] = {"rule[id]": entry_codes["rule_id"], "owner": owner_id}
 
     for i, (day, variant_id) in enumerate(entry_codes["day_ids"].items()):
-        # Skip codes that aren't being updated (or set to None)
-        if day not in updated_codes:
-            continue
+        if day in updated_codes:
+            code = updated_codes[day]  # Could be None (explicit clear)
+        elif variant_id in entry_codes["existing_values"]:
+            code = entry_codes["existing_values"][variant_id]["value"]  # Preserve existing
+        else:
+            continue  # No update and no existing value
 
-        code = updated_codes[day]
         prefix = f"rule[values_attributes][{i}]"
 
         if variant_id in entry_codes["existing_values"]:
-            # Update if it exists (include the ID)
             existing = entry_codes["existing_values"][variant_id]
             payload[f"{prefix}[id]"] = existing["id"]
             payload[f"{prefix}[rule_id]"] = entry_codes["rule_id"]
-            payload[f"{prefix}[value]"] = code
+            payload[f"{prefix}[value]"] = code if code is not None else ""
         else:
-            # Create new entry
             payload[f"{prefix}[rule_id]"] = entry_codes["rule_id"]
-            payload[f"{prefix}[value]"] = code
+            payload[f"{prefix}[value]"] = code if code is not None else ""
 
         payload[f"{prefix}[value_variants_attributes][0][variant_rule_id]"] = entry_codes["variant_id"]
         payload[f"{prefix}[value_variants_attributes][0][rule_variant_item_id]"] = str(variant_id)
