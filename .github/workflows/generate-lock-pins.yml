@@ -27,3 +27,11 @@ jobs:
             --play-by-point-password "${{ secrets.PLAY_BY_POINT_PASSWORD }}" \
             --play-by-point-owner "${{ secrets.DENVER_PLAY_BY_POINT_OWNER }}" \
             --timezone "America/Denver"
+  keepalive-job:
+    name: Keepalive Workflow
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: gautamkrishnar/keepalive-workflow@v2
