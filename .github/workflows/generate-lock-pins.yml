@@ -37,6 +37,22 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - uses: gautamkrishnar/keepalive-workflow@v2
         with:
-          use_api: false
+          fetch-depth: 0
+      - name: Keep workflow alive
+        run: |
+          last_commit_date=$(git log -1 --format=%ct)
+          current_date=$(date +%s)
+          days_since_commit=$(( (current_date - last_commit_date) / 86400 ))
+
+          echo "Days since last commit: $days_since_commit"
+
+          if [ "$days_since_commit" -gt 45 ]; then
+            echo "Last commit was more than 45 days ago. Creating keep-alive commit."
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git commit --allow-empty -m "Keep-alive: prevent workflow from being disabled"
+            git push
+          else
+            echo "Last commit was $days_since_commit days ago. No action needed."
+          fi
