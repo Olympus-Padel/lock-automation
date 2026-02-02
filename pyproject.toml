@@ -18,7 +18,6 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "bs4>=0.0.2",
     "playwright>=1.40.0",
     "requests>=2.32.4",
     "types-requests>=2.32.4.20250611",
