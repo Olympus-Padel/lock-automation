@@ -1,9 +1,11 @@
+import logging
 from collections.abc import Mapping
 from typing import Any, TypedDict
 
-import cloudscraper  # type: ignore[import-untyped]
 import requests
-from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
+
+logger = logging.getLogger(__name__)
 
 
 class ExistingEntryCode(TypedDict):
@@ -85,29 +87,59 @@ class PlayByPointClient:
 
     @staticmethod
     def from_login(*, username: str, password: str) -> "PlayByPointClient":
-        # Use cloudscraper to handle Cloudflare protection
-        session: requests.Session = cloudscraper.create_scraper()
+        # Use Playwright to handle Cloudflare protection
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                headless=True,
+                args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
+            )
+            context = browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                viewport={"width": 1920, "height": 1080},
+            )
+            page = context.new_page()
 
-        # Load sign-in page to capture CSRF token and cookies
-        sign_in_page = session.get("https://app.playbypoint.com/users/sign_in")
-        login_soup = BeautifulSoup(sign_in_page.text, "html.parser")
-        login_csrf: str = login_soup.find("input", {"name": "authenticity_token"})["value"]  # type: ignore[index]
+            # Hide webdriver property to avoid detection
+            page.add_init_script('Object.defineProperty(navigator, "webdriver", {get: () => undefined});')
 
-        payload = {"user[email]": username, "user[password]": password, "authenticity_token": login_csrf}
+            # Navigate to login page
+            logger.info("Navigating to login page...")
+            page.goto("https://app.playbypoint.com/users/sign_in", wait_until="domcontentloaded")
 
-        # Submit POST to sign in
-        sign_in_response = session.post(
-            "https://app.playbypoint.com/users/sign_in",
-            data=payload,
-        )
+            # Wait for login form to appear (may take time if Cloudflare challenge runs)
+            page.wait_for_selector('input[name="user[email]"]', timeout=30000)
 
-        if "Incorrect" in sign_in_response.text or sign_in_response.status_code != 200:
-            raise RuntimeError("Login failed")
+            # Fill in login form
+            logger.info("Filling login form...")
+            page.fill('input[name="user[email]"]', username)
+            page.fill('input[name="user[password]"]', password)
+            page.click('input[type="submit"]')
 
-        logged_in_soup = BeautifulSoup(sign_in_response.text, "html.parser")
-        logged_in_csrf: str = logged_in_soup.find("meta", {"name": "csrf-token"})["content"]  # type: ignore[index]
-        session.headers.update({"X-Csrf-Token": logged_in_csrf})
+            # Wait for navigation after login (URL should change away from sign_in)
+            page.wait_for_url(lambda url: "sign_in" not in url, timeout=30000)
 
+            # Check for login failure
+            if "sign_in" in page.url or "Incorrect" in page.content():
+                browser.close()
+                raise RuntimeError("Login failed")
+
+            # Extract CSRF token from meta tag
+            csrf_token = page.locator('meta[name="csrf-token"]').get_attribute("content")
+            if not csrf_token:
+                browser.close()
+                raise RuntimeError("Could not find CSRF token after login")
+
+            # Transfer cookies to requests session
+            cookies = context.cookies()
+            browser.close()
+
+        session = requests.Session()
+        for cookie in cookies:
+            session.cookies.set(cookie["name"], cookie["value"], domain=cookie["domain"])
+        session.headers.update({"X-Csrf-Token": csrf_token})
+
+        logger.info("Login successful")
         return PlayByPointClient(session)
 
     def update_entry_codes(self, *, owner_id: str, codes: Mapping[str, str | None]) -> None:
