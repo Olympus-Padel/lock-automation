@@ -1,9 +1,9 @@
+import json
 import logging
 from collections.abc import Mapping
 from typing import Any, TypedDict
 
-import requests
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import Browser, BrowserContext, Page, Playwright, sync_playwright
 
 logger = logging.getLogger(__name__)
 
@@ -82,65 +82,100 @@ def _build_update_payload(
 
 
 class PlayByPointClient:
-    def __init__(self, session: requests.Session):
-        self._session = session
+    def __init__(self, playwright: Playwright, browser: Browser, context: BrowserContext, page: Page):
+        self._playwright = playwright
+        self._browser = browser
+        self._context = context
+        self._page = page
 
     @staticmethod
     def from_login(*, username: str, password: str) -> "PlayByPointClient":
         # Use Playwright to handle Cloudflare protection
-        with sync_playwright() as p:
-            browser = p.chromium.launch(
-                headless=True,
-                args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
-            )
-            context = browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                viewport={"width": 1920, "height": 1080},
-            )
-            page = context.new_page()
+        # Note: We keep the browser open for subsequent API calls
+        playwright = sync_playwright().start()
+        browser = playwright.chromium.launch(
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
+        )
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            viewport={"width": 1920, "height": 1080},
+        )
+        page = context.new_page()
 
-            # Hide webdriver property to avoid detection
-            page.add_init_script('Object.defineProperty(navigator, "webdriver", {get: () => undefined});')
+        # Hide webdriver property to avoid detection
+        page.add_init_script('Object.defineProperty(navigator, "webdriver", {get: () => undefined});')
 
-            # Navigate to login page
-            logger.info("Navigating to login page...")
-            page.goto("https://app.playbypoint.com/users/sign_in", wait_until="domcontentloaded")
+        # Navigate to login page
+        logger.info("Navigating to login page...")
+        page.goto("https://app.playbypoint.com/users/sign_in", wait_until="domcontentloaded")
 
-            # Wait for login form to appear (may take time if Cloudflare challenge runs)
-            page.wait_for_selector('input[name="user[email]"]', timeout=30000)
+        # Wait for login form to appear (may take time if Cloudflare challenge runs)
+        page.wait_for_selector('input[name="user[email]"]', timeout=30000)
 
-            # Fill in login form
-            logger.info("Filling login form...")
-            page.fill('input[name="user[email]"]', username)
-            page.fill('input[name="user[password]"]', password)
-            page.click('input[type="submit"]')
+        # Fill in login form
+        logger.info("Filling login form...")
+        page.fill('input[name="user[email]"]', username)
+        page.fill('input[name="user[password]"]', password)
+        page.click('input[type="submit"]')
 
-            # Wait for navigation after login (URL should change away from sign_in)
-            page.wait_for_url(lambda url: "sign_in" not in url, timeout=30000)
+        # Wait for navigation after login (URL should change away from sign_in)
+        page.wait_for_url(lambda url: "sign_in" not in url, timeout=30000)
 
-            # Check for login failure
-            if "sign_in" in page.url or "Incorrect" in page.content():
-                browser.close()
-                raise RuntimeError("Login failed")
-
-            # Extract CSRF token from meta tag
-            csrf_token = page.locator('meta[name="csrf-token"]').get_attribute("content")
-            if not csrf_token:
-                browser.close()
-                raise RuntimeError("Could not find CSRF token after login")
-
-            # Transfer cookies to requests session
-            cookies = context.cookies()
+        # Check for login failure
+        if "sign_in" in page.url or "Incorrect" in page.content():
             browser.close()
-
-        session = requests.Session()
-        for cookie in cookies:
-            session.cookies.set(cookie["name"], cookie["value"], domain=cookie["domain"])
-        session.headers.update({"X-Csrf-Token": csrf_token})
+            playwright.stop()
+            raise RuntimeError("Login failed")
 
         logger.info("Login successful")
-        return PlayByPointClient(session)
+        return PlayByPointClient(playwright, browser, context, page)
+
+    def close(self) -> None:
+        """Close the browser and clean up resources."""
+        self._browser.close()
+        self._playwright.stop()
+
+    def _api_get(self, url: str) -> Any:
+        """Make a GET request using the browser context."""
+        result = self._page.evaluate(
+            """async (url) => {
+            const resp = await fetch(url);
+            return {status: resp.status, body: await resp.text()};
+        }""",
+            url,
+        )
+        if result["status"] != 200:
+            raise RuntimeError(f"API request failed with status {result['status']}: {url}")
+        return json.loads(result["body"])
+
+    def _api_put(self, url: str, data: dict[str, Any]) -> Any:
+        """Make a PUT request using the browser context."""
+        # Get CSRF token from meta tag
+        csrf_token = self._page.locator('meta[name="csrf-token"]').get_attribute("content")
+
+        result = self._page.evaluate(
+            """async ({url, data, csrfToken}) => {
+            const formData = new URLSearchParams();
+            for (const [key, value] of Object.entries(data)) {
+                formData.append(key, value);
+            }
+            const resp = await fetch(url, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRF-Token': csrfToken,
+                },
+                body: formData.toString(),
+            });
+            return {status: resp.status, body: await resp.text()};
+        }""",
+            {"url": url, "data": data, "csrfToken": csrf_token},
+        )
+        if result["status"] != 200:
+            raise RuntimeError(f"API request failed with status {result['status']}: {url}")
+        return json.loads(result["body"]) if result["body"] else None
 
     def update_entry_codes(self, *, owner_id: str, codes: Mapping[str, str | None]) -> None:
         """
@@ -154,17 +189,12 @@ class PlayByPointClient:
             codes (dict): A mapping of days of the month (1-31) to the new codes.
 
         Raises:
-            requests.HTTPError: If the API request fails.
+            RuntimeError: If the API request fails.
         """
-        entry_codes_resp = self._session.get(
+        rules_payload = self._api_get(
             f"https://app.playbypoint.com/api/rules?owner={owner_id}&namespace=facility_rules"
         )
-        entry_codes_resp.raise_for_status()
-        rules_payload = entry_codes_resp.json()
         entry_codes = _parse_entry_codes(rules_payload)
 
         update_payload = _build_update_payload(owner_id=owner_id, entry_codes=entry_codes, updated_codes=codes)
-        update_resp = self._session.put(
-            f"https://app.playbypoint.com/api/rules/{entry_codes['rule_id']}", data=update_payload
-        )
-        update_resp.raise_for_status()
+        self._api_put(f"https://app.playbypoint.com/api/rules/{entry_codes['rule_id']}", update_payload)
