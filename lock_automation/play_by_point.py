@@ -1,6 +1,7 @@
 from collections.abc import Mapping
 from typing import Any, TypedDict
 
+import cloudscraper  # type: ignore[import-untyped]
 import requests
 from bs4 import BeautifulSoup
 
@@ -84,15 +85,8 @@ class PlayByPointClient:
 
     @staticmethod
     def from_login(*, username: str, password: str) -> "PlayByPointClient":
-        session = requests.Session()
-
-        # Set some believable headers
-        # TODO(thomas): Make these more reasonable
-        session.headers.update({
-            "User-Agent": "Mozilla/5.0",
-            "Accept": "text/html,application/xhtml+xml",
-            "Accept-Language": "en-US,en;q=0.5",
-        })
+        # Use cloudscraper to handle Cloudflare protection
+        session: requests.Session = cloudscraper.create_scraper()
 
         # Load sign-in page to capture CSRF token and cookies
         sign_in_page = session.get("https://app.playbypoint.com/users/sign_in")

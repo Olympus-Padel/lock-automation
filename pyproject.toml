@@ -19,6 +19,7 @@ classifiers = [
 ]
 dependencies = [
     "bs4>=0.0.2",
+    "cloudscraper>=1.2.71",
     "requests>=2.32.4",
     "types-requests>=2.32.4.20250611",
 ]
