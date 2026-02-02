@@ -95,24 +95,47 @@ class PlayByPointClient:
         playwright = sync_playwright().start()
         browser = playwright.chromium.launch(
             headless=True,
-            args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+            ],
         )
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
             "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             viewport={"width": 1920, "height": 1080},
+            locale="en-US",
+            timezone_id="America/New_York",
         )
         page = context.new_page()
 
-        # Hide webdriver property to avoid detection
-        page.add_init_script('Object.defineProperty(navigator, "webdriver", {get: () => undefined});')
+        # Hide webdriver property and other automation indicators
+        page.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+            Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+            window.chrome = {runtime: {}};
+        """)
 
         # Navigate to login page
         logger.info("Navigating to login page...")
         page.goto("https://app.playbypoint.com/users/sign_in", wait_until="domcontentloaded")
 
-        # Wait for login form to appear (may take time if Cloudflare challenge runs)
-        page.wait_for_selector('input[name="user[email]"]', timeout=30000)
+        # Wait for Cloudflare challenge to complete (if any) by waiting for login form
+        # with retries, as Cloudflare may take time to verify
+        logger.info("Waiting for login form (Cloudflare may take time)...")
+        try:
+            page.wait_for_selector('input[name="user[email]"]', timeout=60000)
+        except Exception as e:
+            # Log page state for debugging
+            logger.exception(f"Login form not found. Page title: {page.title()}")
+            logger.info(f"Page URL: {page.url}")
+            logger.info(f"Page content preview: {page.content()[:2000]}")
+            browser.close()
+            playwright.stop()
+            raise RuntimeError("Could not load login page - Cloudflare may be blocking") from e
 
         # Fill in login form
         logger.info("Filling login form...")
