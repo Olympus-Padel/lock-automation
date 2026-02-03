@@ -9,7 +9,7 @@ on:
 
 jobs:
   generate-lock-pins:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - name: Check out
         uses: actions/checkout@v4
