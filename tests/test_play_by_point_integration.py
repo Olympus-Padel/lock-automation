@@ -1,13 +1,6 @@
 import os
 
-import pytest
-
 from lock_automation.play_by_point import PlayByPointClient, _parse_entry_codes
-
-pytestmark = pytest.mark.skipif(
-    not os.environ.get("PLAY_BY_POINT_USERNAME"),
-    reason="PlayByPoint credentials not set",
-)
 
 
 def test_login_and_get_rules() -> None:

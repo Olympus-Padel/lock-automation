@@ -38,11 +38,14 @@ jobs:
         uses: ./.github/actions/setup-python-env
 
       - name: Run tests
+        run: uv run python -m pytest tests --ignore=tests/test_play_by_point_integration.py
+
+      - name: Run integration tests
         env:
           PLAY_BY_POINT_USERNAME: ${{ secrets.PLAY_BY_POINT_USERNAME }}
           PLAY_BY_POINT_PASSWORD: ${{ secrets.PLAY_BY_POINT_PASSWORD }}
           DENVER_PLAY_BY_POINT_OWNER: ${{ secrets.DENVER_PLAY_BY_POINT_OWNER }}
-        run: uv run python -m pytest tests
+        run: uv run python -m pytest tests/test_play_by_point_integration.py
 
       - name: Check typing
         run: uv run mypy
