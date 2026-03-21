@@ -58,7 +58,6 @@ show_error_codes = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["integration: tests that require external service credentials"]
 
 [tool.ruff]
 target-version = "py39"

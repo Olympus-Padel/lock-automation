@@ -38,24 +38,11 @@ jobs:
         uses: ./.github/actions/setup-python-env
 
       - name: Run tests
-        run: uv run python -m pytest tests -m "not integration"
-
-      - name: Check typing
-        run: uv run mypy
-
-  integration-tests:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && !github.event.pull_request.draft)
-    steps:
-      - name: Check out
-        uses: actions/checkout@v4
-
-      - name: Set up the environment
-        uses: ./.github/actions/setup-python-env
-
-      - name: Run integration tests
         env:
           PLAY_BY_POINT_USERNAME: ${{ secrets.PLAY_BY_POINT_USERNAME }}
           PLAY_BY_POINT_PASSWORD: ${{ secrets.PLAY_BY_POINT_PASSWORD }}
           DENVER_PLAY_BY_POINT_OWNER: ${{ secrets.DENVER_PLAY_BY_POINT_OWNER }}
-        run: uv run python -m pytest tests -m integration
+        run: uv run python -m pytest tests
+
+      - name: Check typing
+        run: uv run mypy
