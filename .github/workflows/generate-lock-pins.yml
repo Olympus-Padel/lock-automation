@@ -17,9 +17,6 @@ jobs:
       - name: Set up the environment
         uses: ./.github/actions/setup-python-env
 
-      - name: Install Playwright browser and dependencies
-        run: uv run playwright install --with-deps chromium
-
       - name: Generate lock pins for the Denver court
         run: |
           uv run python -m lock_automation.generate_codes_cli \
