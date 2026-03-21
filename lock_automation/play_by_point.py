@@ -1,5 +1,6 @@
 import logging
 import re
+import time
 from collections.abc import Mapping
 from typing import Any, TypedDict
 
@@ -105,43 +106,54 @@ class PlayByPointClient:
         self._csrf_token = csrf_token
 
     @staticmethod
-    def from_login(*, username: str, password: str) -> "PlayByPointClient":
-        session = requests.Session()
-        session.headers.update({
-            "User-Agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
-            ),
-        })
+    def from_login(*, username: str, password: str, max_retries: int = 3) -> "PlayByPointClient":
+        last_error: str = ""
+        for attempt in range(1, max_retries + 1):
+            # Use a fresh session each attempt to avoid stale cookies/Cloudflare state
+            session = requests.Session()
+            session.headers.update({
+                "User-Agent": (
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+                ),
+            })
 
-        # GET the sign-in page to obtain the form authenticity token and session cookie
-        logger.info("Fetching login page...")
-        resp = session.get(f"{PlayByPointClient.BASE_URL}/users/sign_in")
-        resp.raise_for_status()
+            # GET the sign-in page to obtain the form authenticity token and session cookie
+            logger.info("Fetching login page...")
+            resp = session.get(f"{PlayByPointClient.BASE_URL}/users/sign_in")
+            if resp.status_code != 200:
+                last_error = f"GET sign_in returned {resp.status_code}"
+                logger.warning(f"Login attempt {attempt}: {last_error}")
+                if attempt < max_retries:
+                    time.sleep(2**attempt)
+                continue
 
-        form_token = _extract_form_authenticity_token(resp.text)
+            form_token = _extract_form_authenticity_token(resp.text)
 
-        # POST the login form
-        logger.info("Submitting login form...")
-        resp = session.post(
-            f"{PlayByPointClient.BASE_URL}/users/sign_in",
-            data={
-                "authenticity_token": form_token,
-                "user[email]": username,
-                "user[password]": password,
-                "user[remember_me]": "0",
-            },
-            allow_redirects=True,
-        )
-        resp.raise_for_status()
+            # POST the login form
+            logger.info("Submitting login form...")
+            resp = session.post(
+                f"{PlayByPointClient.BASE_URL}/users/sign_in",
+                data={
+                    "authenticity_token": form_token,
+                    "user[email]": username,
+                    "user[password]": password,
+                    "user[remember_me]": "0",
+                },
+                allow_redirects=True,
+            )
 
-        if "sign_in" in resp.url:
-            raise RuntimeError("Login failed — redirected back to sign-in page")
+            if resp.status_code == 200 and "sign_in" not in resp.url:
+                csrf_token = _extract_csrf_token(resp.text)
+                logger.info("Login successful")
+                return PlayByPointClient(session, csrf_token)
 
-        csrf_token = _extract_csrf_token(resp.text)
-        logger.info("Login successful")
+            last_error = f"POST sign_in returned {resp.status_code}, ended up at {resp.url}"
+            logger.warning(f"Login attempt {attempt}: {last_error}")
+            if attempt < max_retries:
+                time.sleep(2**attempt)
 
-        return PlayByPointClient(session, csrf_token)
+        raise RuntimeError(f"Login failed after {max_retries} attempts — {last_error}")
 
     def _api_get(self, url: str) -> Any:
         """Make an authenticated GET request."""
