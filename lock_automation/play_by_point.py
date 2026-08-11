@@ -1,9 +1,10 @@
-import json
 import logging
+import re
+import time
 from collections.abc import Mapping
 from typing import Any, TypedDict
 
-from playwright.sync_api import Browser, BrowserContext, Page, Playwright, sync_playwright
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -81,124 +82,98 @@ def _build_update_payload(
     return payload
 
 
+def _extract_csrf_token(html: str) -> str:
+    """Extract the CSRF token from a Rails page's meta tag."""
+    match = re.search(r'<meta\s+name="csrf-token"\s+content="([^"]+)"', html)
+    if not match:
+        raise RuntimeError("Could not find CSRF token in page")
+    return match.group(1)
+
+
+def _extract_form_authenticity_token(html: str) -> str:
+    """Extract the authenticity_token from a Rails form's hidden input."""
+    match = re.search(r'<input[^>]*name="authenticity_token"[^>]*value="([^"]+)"', html)
+    if not match:
+        raise RuntimeError("Could not find authenticity_token in form")
+    return match.group(1)
+
+
 class PlayByPointClient:
-    def __init__(self, playwright: Playwright, browser: Browser, context: BrowserContext, page: Page):
-        self._playwright = playwright
-        self._browser = browser
-        self._context = context
-        self._page = page
+    BASE_URL = "https://app.playbypoint.com"
+
+    def __init__(self, session: requests.Session, csrf_token: str):
+        self._session = session
+        self._csrf_token = csrf_token
 
     @staticmethod
-    def from_login(*, username: str, password: str) -> "PlayByPointClient":
-        # Use Playwright to handle Cloudflare protection
-        # Note: We keep the browser open for subsequent API calls
-        playwright = sync_playwright().start()
-        browser = playwright.chromium.launch(
-            headless=True,
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-            ],
-        )
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            viewport={"width": 1920, "height": 1080},
-            locale="en-US",
-            timezone_id="America/New_York",
-        )
-        page = context.new_page()
+    def from_login(*, username: str, password: str, max_retries: int = 3) -> "PlayByPointClient":
+        last_error: str = ""
+        for attempt in range(1, max_retries + 1):
+            # Use a fresh session each attempt to avoid stale cookies/Cloudflare state
+            session = requests.Session()
+            session.headers.update({
+                "User-Agent": (
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+                ),
+            })
 
-        # Hide webdriver property and other automation indicators
-        page.add_init_script("""
-            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-            Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
-            Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
-            window.chrome = {runtime: {}};
-        """)
+            # GET the sign-in page to obtain the form authenticity token and session cookie
+            logger.info("Fetching login page...")
+            resp = session.get(f"{PlayByPointClient.BASE_URL}/users/sign_in")
+            if resp.status_code != 200:
+                last_error = f"GET sign_in returned {resp.status_code}"
+                logger.warning(f"Login attempt {attempt}: {last_error}")
+                if attempt < max_retries:
+                    time.sleep(2**attempt)
+                continue
 
-        # Navigate to login page
-        logger.info("Navigating to login page...")
-        page.goto("https://app.playbypoint.com/users/sign_in", wait_until="domcontentloaded")
+            form_token = _extract_form_authenticity_token(resp.text)
 
-        # Wait for Cloudflare challenge to complete (if any) by waiting for login form
-        # with retries, as Cloudflare may take time to verify
-        logger.info("Waiting for login form (Cloudflare may take time)...")
-        try:
-            page.wait_for_selector('input[name="user[email]"]', timeout=60000)
-        except Exception as e:
-            # Log page state for debugging
-            logger.exception(f"Login form not found. Page title: {page.title()}")
-            logger.info(f"Page URL: {page.url}")
-            logger.info(f"Page content preview: {page.content()[:2000]}")
-            browser.close()
-            playwright.stop()
-            raise RuntimeError("Could not load login page - Cloudflare may be blocking") from e
+            # POST the login form
+            logger.info("Submitting login form...")
+            resp = session.post(
+                f"{PlayByPointClient.BASE_URL}/users/sign_in",
+                data={
+                    "authenticity_token": form_token,
+                    "user[email]": username,
+                    "user[password]": password,
+                    "user[remember_me]": "0",
+                },
+                allow_redirects=True,
+            )
 
-        # Fill in login form
-        logger.info("Filling login form...")
-        page.fill('input[name="user[email]"]', username)
-        page.fill('input[name="user[password]"]', password)
-        page.click('input[type="submit"]')
+            if resp.status_code == 200 and "sign_in" not in resp.url:
+                csrf_token = _extract_csrf_token(resp.text)
+                logger.info("Login successful")
+                return PlayByPointClient(session, csrf_token)
 
-        # Wait for navigation after login (URL should change away from sign_in)
-        page.wait_for_url(lambda url: "sign_in" not in url, timeout=30000)
+            last_error = f"POST sign_in returned {resp.status_code}, ended up at {resp.url}"
+            logger.warning(f"Login attempt {attempt}: {last_error}")
+            if attempt < max_retries:
+                time.sleep(2**attempt)
 
-        # Check for login failure
-        if "sign_in" in page.url or "Incorrect" in page.content():
-            browser.close()
-            playwright.stop()
-            raise RuntimeError("Login failed")
-
-        logger.info("Login successful")
-        return PlayByPointClient(playwright, browser, context, page)
-
-    def close(self) -> None:
-        """Close the browser and clean up resources."""
-        self._browser.close()
-        self._playwright.stop()
+        raise RuntimeError(f"Login failed after {max_retries} attempts — {last_error}")
 
     def _api_get(self, url: str) -> Any:
-        """Make a GET request using the browser context."""
-        result = self._page.evaluate(
-            """async (url) => {
-            const resp = await fetch(url);
-            return {status: resp.status, body: await resp.text()};
-        }""",
-            url,
-        )
-        if result["status"] != 200:
-            raise RuntimeError(f"API request failed with status {result['status']}: {url}")
-        return json.loads(result["body"])
+        """Make an authenticated GET request."""
+        resp = self._session.get(url, headers={"Accept": "application/json"})
+        if resp.status_code != 200:
+            raise RuntimeError(f"API request failed with status {resp.status_code}: {url}")
+        return resp.json()
 
     def _api_put(self, url: str, data: dict[str, Any]) -> Any:
-        """Make a PUT request using the browser context."""
-        # Get CSRF token from meta tag
-        csrf_token = self._page.locator('meta[name="csrf-token"]').get_attribute("content")
-
-        result = self._page.evaluate(
-            """async ({url, data, csrfToken}) => {
-            const formData = new URLSearchParams();
-            for (const [key, value] of Object.entries(data)) {
-                formData.append(key, value);
-            }
-            const resp = await fetch(url, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'X-CSRF-Token': csrfToken,
-                },
-                body: formData.toString(),
-            });
-            return {status: resp.status, body: await resp.text()};
-        }""",
-            {"url": url, "data": data, "csrfToken": csrf_token},
+        """Make an authenticated PUT request."""
+        resp = self._session.put(
+            url,
+            data=data,
+            headers={
+                "X-CSRF-Token": self._csrf_token,
+            },
         )
-        if result["status"] != 200:
-            raise RuntimeError(f"API request failed with status {result['status']}: {url}")
-        return json.loads(result["body"]) if result["body"] else None
+        if resp.status_code != 200:
+            raise RuntimeError(f"API request failed with status {resp.status_code}: {url}")
+        return resp.json() if resp.text else None
 
     def update_entry_codes(self, *, owner_id: str, codes: Mapping[str, str | None]) -> None:
         """
@@ -214,10 +189,8 @@ class PlayByPointClient:
         Raises:
             RuntimeError: If the API request fails.
         """
-        rules_payload = self._api_get(
-            f"https://app.playbypoint.com/api/rules?owner={owner_id}&namespace=facility_rules"
-        )
+        rules_payload = self._api_get(f"{self.BASE_URL}/api/rules?owner={owner_id}&namespace=facility_rules")
         entry_codes = _parse_entry_codes(rules_payload)
 
         update_payload = _build_update_payload(owner_id=owner_id, entry_codes=entry_codes, updated_codes=codes)
-        self._api_put(f"https://app.playbypoint.com/api/rules/{entry_codes['rule_id']}", update_payload)
+        self._api_put(f"{self.BASE_URL}/api/rules/{entry_codes['rule_id']}", update_payload)
